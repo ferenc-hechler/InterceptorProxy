@@ -8,9 +8,18 @@ import java.net.SocketTimeoutException;
 
 public class InterceptorMain {
 
-	String TARGET_HOST="127.0.0.1";
-	int TARGET_PORT = 5000;
-	
+//	String TARGET_HOST="127.0.0.1";
+//	int TARGET_PORT = 5000;
+
+//	String TARGET_HOST="www.responsibledrinking.org";
+//	int TARGET_PORT = 80;
+
+	String TARGET_HOST="nextcloud.k8s.feri.ai";
+	int TARGET_PORT = 80;
+		
+//	String TARGET_HOST="38.242.233.21";
+//	int TARGET_PORT = 80;
+		
 	
 	private ServerSocket serverSocket;
 	/**
@@ -57,9 +66,7 @@ public class InterceptorMain {
 				// serverSocket.accpet() Blocks until a connection is made
 				Socket socket = serverSocket.accept();
 				
-				// Create new Thread and pass it Runnable RequestHandler
-				Thread thread = new Thread(new ForwardHandler(TARGET_HOST, TARGET_PORT, socket));
-				thread.start();
+				new SocketConnector(TARGET_HOST, TARGET_PORT, socket);
 				
 			} catch (SocketException e) {
 				// Socket exception is triggered by management system to shut down the proxy 

@@ -3,13 +3,13 @@ package de.hechler.interceptor;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.UnsupportedEncodingException;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 
 public class CharThenByteInputStream extends InputStream {
 
 	
 	private InputStream delegate;
+	private Charset charset;
 	private byte[] buffer;
 	private int bufPos;
 	private int bufSize;
@@ -20,8 +20,9 @@ public class CharThenByteInputStream extends InputStream {
 	private boolean encodingOk;
 	private boolean closed;
 	
-	public CharThenByteInputStream(InputStream delegate) {
+	public CharThenByteInputStream(InputStream delegate, Charset charset) {
 		this.delegate = delegate;
+		this.charset = charset;
 		this.buffer = new byte[32768];
 		this.bufPos = 0;
 		this.bufSize = 0;
@@ -37,7 +38,8 @@ public class CharThenByteInputStream extends InputStream {
 	public String readLine() throws IOException {
 		while (!closed) {
 			if (!encodingOk) {
-				throw new UnsupportedEncodingException();
+//				throw new UnsupportedEncodingException();
+				return null;
 			}
 			int nextPos = findNextEndl();
 			if (nextPos != -1) {
@@ -102,14 +104,14 @@ public class CharThenByteInputStream extends InputStream {
 				bufPos = bufPos + cnt;
 			}
 			bufPos = endlPos + 1;
-			String result = overrun.toString(StandardCharsets.UTF_8);
+			String result = overrun.toString(charset);
 			overrun.reset();
 			return result;
 		}
 		if ((cnt <= 0) && closed) {
 			return null;
 		}
-		String result = new String(buffer, bufPos, cnt, StandardCharsets.UTF_8);
+		String result = new String(buffer, bufPos, cnt, charset);
 		bufPos = endlPos+1;
 		return result;
 	}
@@ -154,6 +156,10 @@ public class CharThenByteInputStream extends InputStream {
 
 	public boolean isClosed() {
 		return closed;
+	}
+
+	public void setEncodingError() {
+		this.encodingOk = false;
 	}
 	
 }
