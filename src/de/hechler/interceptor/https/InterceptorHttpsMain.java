@@ -1,4 +1,4 @@
-package de.hechler.interceptor;
+package de.hechler.interceptor.https;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -6,16 +6,16 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 
-public class InterceptorMain {
+import de.hechler.interceptor.SocketConnector;
 
-	String TARGET_HOST="127.0.0.1";
-	int TARGET_PORT = 5000;
+public class InterceptorHttpsMain {
 
-//	String TARGET_HOST="www.responsibledrinking.org";
-//	int TARGET_PORT = 80;
+//	String TARGET_HOST="127.0.0.1";
+//	int TARGET_PORT = 5000;
 
-		
-	
+	String TARGET_HOST="developer.telekom.de";
+	int TARGET_PORT = 443;
+
 	private ServerSocket serverSocket;
 	/**
 	 * Semaphore for Proxy and Consolee Management System.
@@ -23,7 +23,7 @@ public class InterceptorMain {
 	private volatile boolean running = true;
 
 	
-	public InterceptorMain(int port) {
+	public InterceptorHttpsMain(int port) {
 		
 		try {
 			// Create the Server Socket for the Proxy 
@@ -61,7 +61,9 @@ public class InterceptorMain {
 				// serverSocket.accpet() Blocks until a connection is made
 				Socket socket = serverSocket.accept();
 				
-				new SocketConnector(TARGET_HOST, TARGET_PORT, socket);
+				HttpsConnector httpsCon = new HttpsConnector(socket);
+				httpsCon.readRequest();
+				httpsCon.connect(TARGET_HOST, TARGET_PORT);
 				
 			} catch (SocketException e) {
 				// Socket exception is triggered by management system to shut down the proxy 
@@ -86,7 +88,7 @@ public class InterceptorMain {
 	// Main method for the program
 	public static void main(String[] args) {
 		// Create an instance of Proxy and begin listening for connections
-		InterceptorMain proxy = new InterceptorMain(8080);
+		InterceptorHttpsMain proxy = new InterceptorHttpsMain(8080);
 		proxy.listen();	
 	}
 	
