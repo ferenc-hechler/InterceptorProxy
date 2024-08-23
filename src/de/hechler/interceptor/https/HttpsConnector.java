@@ -1,19 +1,26 @@
 package de.hechler.interceptor.https;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.Socket;
 import java.net.URL;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import de.hechler.interceptor.CharThenByteInputStream;
 
 public class HttpsConnector {
 
+	private static AtomicInteger nextId = new AtomicInteger();
+	private String id; 
+	
 	private Socket clientSocket;
 	private CharThenByteInputStream browserIn;
 	private OutputStream browserOs;
@@ -26,15 +33,40 @@ public class HttpsConnector {
 	private Map<String, String> header;
 	private Exception lastErr;
 
+	private String endl;
+	private Charset charset;
 	
 	HttpURLConnection serverConn;
 	InputStream serverIs;
 	
 	public HttpsConnector(Socket clientSocket) {
+		this.id = Integer.toString(nextId.incrementAndGet());
 		this.clientSocket = clientSocket;
 		this.header = new HashMap<>();
+		this.charset = StandardCharsets.UTF_8;
+		this.endl = "\n";
 	}
 
+	private void log(String type, Object... msgs) {
+		StringBuilder line = new StringBuilder(256);
+		line.append(id).append('[').append(type).append("]").append(": ");
+		for (Object msg : msgs) {
+			String msgStr;
+			if (msg == null){
+				msgStr = "<null>";
+			}
+			else if (msg instanceof String) {
+				msgStr = (String) msg;
+			}
+			else {
+				msgStr = msg.toString();
+			}
+			line.append(msgStr);
+		}
+		System.out.println(line);
+	}
+	private void logReq(String type, Object... msgs) { log("req", msgs); }
+	private void logRsp(String type, Object... msgs) { log("rsp", msgs); }
 
 	// https://beeceptor.com/docs/concepts/http-headers/
 	// https://developer.mozilla.org/en-US/docs/Glossary/Request_header
@@ -43,7 +75,6 @@ public class HttpsConnector {
 	private static final String HEADER_FIELD_RX   = "^([^:]+):\\s*(.*)$";
 	
 //			RQ: GET / HTTP/1.1
-//			RQ-INF: rewrite 'Host: localhost:8080'
 //			RQ: Host: 127.0.0.1:5000
 //			RQ: User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0
 //			RQ: Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/png,image/svg+xml,*/*;q=0.8
@@ -62,14 +93,18 @@ public class HttpsConnector {
 		try {
 			String requestLine = browserIn.readLine();
 			if (!requestLine.matches(REQUEST_LINE_RX)) {
+				if (requestLine.equals("INTERCEPTOR SIGKILL")) {
+					System.err.println("received '"+requestLine+"', exiting");
+					System.exit(0);
+				}
 				throw new UnsupportedOperationException("unknown request line format '"+requestLine+"'");
 			}
 			method = requestLine.replaceAll(REQUEST_LINE_RX, "$1");
 			path = requestLine.replaceAll(REQUEST_LINE_RX, "$2");
 			httpVersion = requestLine.replaceAll(REQUEST_LINE_RX, "$3");
-			System.out.println("rq: METHOD: "+method);
-			System.out.println("rq: PATH: "+path);
-			System.out.println("rq: HTTP-VERSION: "+httpVersion);
+			logReq("METHOD: ", method);
+			logReq("PATH: ", path);
+			logReq("HTTP-VERSION: ", httpVersion);
 			header = new HashMap<>();
 			String line = browserIn.readLine();
 			while ((line != null) && !line.isBlank()) {
@@ -79,7 +114,7 @@ public class HttpsConnector {
 				String key = line.replaceAll(HEADER_FIELD_RX, "$1").trim();
 				String value = line.replaceAll(HEADER_FIELD_RX, "$2").trim();
 				header.put(key, value);
-				System.out.println("rq: Header("+key+") = '"+value+"'");
+				logReq("Header(",key,") = '",value,"'");
 				line = browserIn.readLine();
 			}
 		}
@@ -90,10 +125,10 @@ public class HttpsConnector {
 	}
 
 	
-	public void readRequest() {
+	public synchronized void readRequest() {
 		try {
 			clientSocket.setSoTimeout(2000);
-			browserIn = new CharThenByteInputStream(clientSocket.getInputStream(), StandardCharsets.ISO_8859_1);
+			browserIn = new CharThenByteInputStream(clientSocket.getInputStream(), charset);
 			browserOs = clientSocket.getOutputStream();
 			
 			readHeader();
@@ -110,49 +145,76 @@ public class HttpsConnector {
 	 * @param hostname
 	 * @param port
 	 */
-	public void connect(String hostname, int port) {
+	public synchronized void connect(String hostname, int port) {
 		try {
 			String portSuffix = port==443 ? "" : ":"+port;
-			// Create a neat value object to hold the URL
+
 	        URL url = new URL("https://"+hostname+portSuffix+path);
 	        System.out.println("URL: "+url);
-
 	        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
+	        connection.setRequestMethod(method);
+        	String host = "?"; 
+	        for (String key : header.keySet()) {
+	        	String value = header.get(key);
+	        	if (key.equalsIgnoreCase("host")) {
+	        		host = header.get(key);
+	        	}
+	        	else {
+		        	connection.setRequestProperty(key, value);
+	        	}
+	        }
+	        
+			int responseCode = connection.getResponseCode();
+			String responseMessage = connection.getResponseMessage();
+			logRsp("HTTP Response: ", responseCode, " - ", responseMessage);
+			
+			browserWriteline("HTTP/"+httpVersion+" "+responseCode+" "+responseMessage);
 	        for (String key : connection.getHeaderFields().keySet()) {
 	        	List<String> values = connection.getHeaderFields().get(key);
-	        	System.out.println("rsp: "+key+"="+values);
+	        	if ((key == null) || (key.toLowerCase().equals("transfer-encoding"))) {
+	        		continue;
+	        	}
+        		logRsp(key,"=",values);
+        		for (String value : values) {
+        			browserWriteline(key+": "+value);
+        		}
 	        }
+	        browserWriteline("");
 	        
-	        
-	        if (false) {
-	        	connection.setRequestMethod(method);
-	        	String host = "?"; 
-		        for (String key : header.keySet()) {
-		        	String value = header.get(key);
-		        	if (key.equalsIgnoreCase("host")) {
-		        		host = header.get(key);
-		        	}
-		        	else {
-			        	connection.setRequestProperty(key, value);
-		        	}
-		        }
-	        }
+			if (responseCode == HttpURLConnection.HTTP_OK) { // success
+		        InputStream serverIs = connection.getInputStream();
 
-	        InputStream serverIs = connection.getInputStream();
-
-	        byte[] buf = new byte[32768];
-			int cnt = serverIs.read(buf);
-			while (cnt > 0) {
-				browserOs.write(buf, 0, cnt);
-				cnt = serverIs.read(buf);
+		        ByteArrayOutputStream debug = new ByteArrayOutputStream();
+		        
+		        byte[] buf = new byte[32768];
+				int cnt = serverIs.read(buf);
+				while (cnt > 0) {
+					browserOs.write(buf, 0, cnt);
+					debug.write(buf, 0, cnt);
+					cnt = serverIs.read(buf);
+				}
+				browserOs.flush();
+				String body;
+				try {
+					body = debug.toString(charset);
+				}
+				catch (Exception e) {
+					body = e.toString();
+				}
+				logRsp("-----  BODY -----\n", body);
+				logRsp("-----------------");
 			}
-
+			browserOs.close();
 		}
 		catch (Exception e) {
 			lastErr = e;
 			e.printStackTrace();
 		}
+	}
+
+	private void browserWriteline(String line) throws IOException {
+		browserOs.write((line+endl).getBytes(charset));
 	}
 
 

@@ -1,19 +1,20 @@
 package de.hechler.interceptor.https;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.BindException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
-
-import de.hechler.interceptor.SocketConnector;
+import java.nio.charset.StandardCharsets;
 
 public class InterceptorHttpsMain {
 
 //	String TARGET_HOST="127.0.0.1";
 //	int TARGET_PORT = 5000;
 
-	String TARGET_HOST="developer.telekom.de";
+	String TARGET_HOST="kubeflow.rnai-ml-work.aws.telekom.de";
 	int TARGET_PORT = 443;
 
 	private ServerSocket serverSocket;
@@ -26,8 +27,27 @@ public class InterceptorHttpsMain {
 	public InterceptorHttpsMain(int port) {
 		
 		try {
-			// Create the Server Socket for the Proxy 
-			serverSocket = new ServerSocket(port);
+			// Create the Server Socket for the Proxy
+			while (true) {
+				try {
+					serverSocket = new ServerSocket(port);
+					break;
+				}
+				catch (BindException e) {
+					System.out.println("Detected running instance on port "+port);
+					System.out.println("Sending kill request");
+					Socket clientSocket = new Socket((String)null, port);
+					OutputStream os = clientSocket.getOutputStream();
+					os.write("INTERCEPTOR SIGKILL\n".getBytes(StandardCharsets.UTF_8));
+					os.flush();
+					os.close();
+					try {
+						Thread.sleep(100);
+					} catch (InterruptedException ie) { throw new RuntimeException(ie); }
+					clientSocket.close();
+					System.out.println("...retry");
+				}
+			}
 
 			// Set the timeout
 			//serverSocket.setSoTimeout(100000);	// debug
