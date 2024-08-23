@@ -1,5 +1,6 @@
 package de.hechler.interceptor.https;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,6 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.GZIPInputStream;
 
 import de.hechler.interceptor.CharThenByteInputStream;
 
@@ -65,8 +67,8 @@ public class HttpsConnector {
 		}
 		System.out.println(line);
 	}
-	private void logReq(String type, Object... msgs) { log("req", msgs); }
-	private void logRsp(String type, Object... msgs) { log("rsp", msgs); }
+	private void logReq(Object... msgs) { log("req", msgs); }
+	private void logRsp(Object... msgs) { log("rsp", msgs); }
 
 	// https://beeceptor.com/docs/concepts/http-headers/
 	// https://developer.mozilla.org/en-US/docs/Glossary/Request_header
@@ -119,6 +121,7 @@ public class HttpsConnector {
 			}
 		}
 		catch (Exception e) {
+			logReq(e.toString());
 			e.printStackTrace();
 			lastErr = e;
 		}
@@ -135,6 +138,7 @@ public class HttpsConnector {
 		}
 		catch (Exception e) {
 			lastErr = e;
+			log("ini", e.toString());
 			e.printStackTrace();
 		}
 	}
@@ -171,9 +175,20 @@ public class HttpsConnector {
 			logRsp("HTTP Response: ", responseCode, " - ", responseMessage);
 			
 			browserWriteline("HTTP/"+httpVersion+" "+responseCode+" "+responseMessage);
+			String contentEncoding = "?";
 	        for (String key : connection.getHeaderFields().keySet()) {
 	        	List<String> values = connection.getHeaderFields().get(key);
-	        	if ((key == null) || (key.toLowerCase().equals("transfer-encoding"))) {
+	        	if (key == null) {
+	        		logRsp("IGNORE <null>=",values);
+	        		continue;
+	        	}
+	        	else if (key.equalsIgnoreCase("Transfer-Encoding")) {
+	        		logRsp("IGNORE ",key,"=",values);
+	        		continue;
+	        	}
+	        	else if (key.equalsIgnoreCase("Content-Encoding")) {
+	        		logRsp("INFO ",key,"=",values);
+	        		contentEncoding = values.get(0);
 	        		continue;
 	        	}
         		logRsp(key,"=",values);
@@ -187,7 +202,7 @@ public class HttpsConnector {
 		        InputStream serverIs = connection.getInputStream();
 
 		        ByteArrayOutputStream debug = new ByteArrayOutputStream();
-		        
+
 		        byte[] buf = new byte[32768];
 				int cnt = serverIs.read(buf);
 				while (cnt > 0) {
@@ -196,9 +211,23 @@ public class HttpsConnector {
 					cnt = serverIs.read(buf);
 				}
 				browserOs.flush();
-				String body;
+				String body = "?";
 				try {
-					body = debug.toString(charset);
+					if (contentEncoding.equals("gzip")) {
+						byte[] gzipBytes = debug.toByteArray();
+						InputStream gzIs = new ByteArrayInputStream(gzipBytes);
+						GZIPInputStream gis = new GZIPInputStream(gzIs);
+						ByteArrayOutputStream debug2 = new ByteArrayOutputStream();
+						cnt = gis.read(buf);
+						while (cnt > 0) {
+							debug2.write(buf, 0, cnt);
+							cnt = gis.read(buf);
+						}
+						body = debug2.toString(charset);
+					}
+					else {
+						body = debug.toString(charset);
+					}
 				}
 				catch (Exception e) {
 					body = e.toString();
@@ -210,6 +239,7 @@ public class HttpsConnector {
 		}
 		catch (Exception e) {
 			lastErr = e;
+			log("exc", e.toString());
 			e.printStackTrace();
 		}
 	}

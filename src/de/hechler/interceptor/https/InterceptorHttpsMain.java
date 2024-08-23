@@ -14,7 +14,8 @@ public class InterceptorHttpsMain {
 //	String TARGET_HOST="127.0.0.1";
 //	int TARGET_PORT = 5000;
 
-	String TARGET_HOST="kubeflow.rnai-ml-work.aws.telekom.de";
+//	String TARGET_HOST="kubeflow.rnai-ml-work.aws.telekom.de";
+	String TARGET_HOST="nextcloud.k8s.feri.ai";
 	int TARGET_PORT = 443;
 
 	private ServerSocket serverSocket;
