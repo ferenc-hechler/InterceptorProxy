@@ -1,0 +1,9 @@
+HTTP/1.1 200 OK
+server: istio-envoy
+x-envoy-upstream-service-time: 9
+x-content-type-options: nosniff
+x-frame-options: sameorigin
+Connection: keep-alive
+strict-transport-security: max-age=31536000; includeSubDomains
+Date: Fri, 23 Aug 2024 12:02:52 GMT
+Content-Type: text/html; charset=utf-8

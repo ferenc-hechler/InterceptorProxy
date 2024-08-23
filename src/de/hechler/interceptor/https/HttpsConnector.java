@@ -141,6 +141,7 @@ public class HttpsConnector {
 
 	/**
 	 * see https://www.twilio.com/de-de/blog/5-moglichkeiten-fur-http-anfragen-java
+	 * https://www.digitalocean.com/community/tutorials/java-httpurlconnection-example-java-http-request-get-post
 	 * 
 	 * @param hostname
 	 * @param port
