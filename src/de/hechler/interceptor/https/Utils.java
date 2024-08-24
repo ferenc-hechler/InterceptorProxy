@@ -10,4 +10,24 @@ public class Utils {
 		return fmt.format(new Date());
 	}
 	
+	public static String round(double d, int decimals) {
+		return String.format("%."+decimals+"f", d);
+	}
+
+	public static String prettyBytes(long bytes) {
+		if (bytes < 1024) {
+			return bytes+"b";
+		}
+		if (bytes < 1024*1024) {
+			return round(bytes/1024,1)+"kb";
+		}
+		if (bytes < 1024*1024*1024) {
+			return round(bytes/1024/1024,1)+"Mb";
+		}
+		if (bytes < 1024*1024*1024*1024) {
+			return round(bytes/1024/1024/1024,1)+"Gb";
+		}
+		return round(bytes/1024/1024/1024/1024,1)+"Tb";
+	}
+	
 }
