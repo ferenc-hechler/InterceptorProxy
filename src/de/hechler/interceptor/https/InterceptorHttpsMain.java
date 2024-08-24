@@ -14,9 +14,13 @@ public class InterceptorHttpsMain {
 //	String TARGET_HOST="127.0.0.1";
 //	int TARGET_PORT = 5000;
 
-//	String TARGET_HOST="kubeflow.rnai-ml-work.aws.telekom.de";
-	String TARGET_HOST="nextcloud.k8s.feri.ai";
-	int TARGET_PORT = 443;
+//	String TARGET_PROTOCOL = "https"
+//	String TARGET_HOST="nextcloud.k8s.feri.ai";
+//	int TARGET_PORT = 443;
+	
+	String TARGET_PROTOCOL = "http";
+	String TARGET_HOST="207.180.253.250";
+	int TARGET_PORT = 18080;
 
 	private ServerSocket serverSocket;
 	/**
@@ -39,7 +43,7 @@ public class InterceptorHttpsMain {
 					System.out.println("Sending kill request");
 					Socket clientSocket = new Socket((String)null, port);
 					OutputStream os = clientSocket.getOutputStream();
-					os.write("INTERCEPTOR SIGKILL\n".getBytes(StandardCharsets.UTF_8));
+					os.write("INTERCEPTOR SIGKILL\r\n".getBytes(StandardCharsets.UTF_8));
 					os.flush();
 					os.close();
 					try {
@@ -84,7 +88,7 @@ public class InterceptorHttpsMain {
 				
 				HttpsConnector httpsCon = new HttpsConnector(socket);
 				httpsCon.readRequest();
-				httpsCon.connect(TARGET_HOST, TARGET_PORT);
+				httpsCon.connect(TARGET_PROTOCOL, TARGET_HOST, TARGET_PORT);
 				
 			} catch (SocketException e) {
 				// Socket exception is triggered by management system to shut down the proxy 
@@ -95,21 +99,12 @@ public class InterceptorHttpsMain {
 		}
 	}
 
-
-	/**
-	 * Saves the blocked and cached sites to a file so they can be re loaded at a later time.
-	 * Also joins all of the RequestHandler threads currently servicing requests.
-	 */
-	private void closeServer(){
-		System.out.println("\nClosing Server..");
-		running = false;
-	}
-
 	
 	// Main method for the program
 	public static void main(String[] args) {
 		// Create an instance of Proxy and begin listening for connections
-		InterceptorHttpsMain proxy = new InterceptorHttpsMain(8080);
+		StreamLogger.setOutputFolder("./requestlog/"+Utils.now());
+		InterceptorHttpsMain proxy = new InterceptorHttpsMain(18080);
 		proxy.listen();	
 	}
 	

@@ -16,8 +16,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.GZIPInputStream;
 
-import de.hechler.interceptor.CharThenByteInputStream;
-
 public class HttpsConnector {
 
 	private static AtomicInteger nextId = new AtomicInteger();
@@ -46,7 +44,7 @@ public class HttpsConnector {
 		this.clientSocket = clientSocket;
 		this.header = new HashMap<>();
 		this.charset = StandardCharsets.UTF_8;
-		this.endl = "\n";
+		this.endl = "\r\n";
 	}
 
 	private void log(String type, Object... msgs) {
@@ -128,17 +126,16 @@ public class HttpsConnector {
 	}
 
 	
-	public synchronized void readRequest() {
+	public void readRequest() {
 		try {
-			clientSocket.setSoTimeout(2000);
-			browserIn = new CharThenByteInputStream(clientSocket.getInputStream(), charset);
-			browserOs = clientSocket.getOutputStream();
-			
+//			clientSocket.setSoTimeout(2000);
+			browserIn = new CharThenByteInputStream(id+"-request", clientSocket.getInputStream(), charset);
+			browserOs = new LoggingOutputStream(id+"-response", clientSocket.getOutputStream(), charset);
 			readHeader();
 		}
 		catch (Exception e) {
 			lastErr = e;
-			log("ini", e.toString());
+			log("exc", e.toString());
 			e.printStackTrace();
 		}
 	}
@@ -150,11 +147,14 @@ public class HttpsConnector {
 	 * @param hostname
 	 * @param port
 	 */
-	public synchronized void connect(String hostname, int port) {
+	public void connect(String protocol, String hostname, int port) {
+		if (path == null) {
+			return;
+		}
 		try {
 			String portSuffix = port==443 ? "" : ":"+port;
 
-	        URL url = new URL("https://"+hostname+portSuffix+path);
+	        URL url = new URL(protocol+"://"+hostname+portSuffix+path);
 	        System.out.println("URL: "+url);
 	        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
@@ -165,9 +165,28 @@ public class HttpsConnector {
 	        	if (key.equalsIgnoreCase("host")) {
 	        		host = header.get(key);
 	        	}
+	        	else if (key.equalsIgnoreCase("Accept-Encoding")) {
+	        		logReq("skipping "+key+" = "+value);
+	        	}
 	        	else {
 		        	connection.setRequestProperty(key, value);
 	        	}
+	        }
+	        
+	        if (method.equals("POST")) {
+	        	byte[] buffer = new byte[32768];
+	        	connection.setDoOutput(true);
+	        	OutputStream serverOs = connection.getOutputStream();
+	        	int cnt = browserIn.read(buffer);
+	        	while (cnt > 0) {
+	        		logReq("BODY=",new String(buffer, 0, cnt));
+	        		serverOs.write(buffer, 0, cnt);
+	        		// TODO stream in thread
+		        	// cnt = browserIn.read(buffer);
+	        		cnt = -1;
+	        	}
+	        	serverOs.flush();
+	        	serverOs.close();
 	        }
 	        
 			int responseCode = connection.getResponseCode();
@@ -201,39 +220,39 @@ public class HttpsConnector {
 			if (responseCode == HttpURLConnection.HTTP_OK) { // success
 		        InputStream serverIs = connection.getInputStream();
 
-		        ByteArrayOutputStream debug = new ByteArrayOutputStream();
+//		        ByteArrayOutputStream debug = new ByteArrayOutputStream();
 
 		        byte[] buf = new byte[32768];
 				int cnt = serverIs.read(buf);
 				while (cnt > 0) {
 					browserOs.write(buf, 0, cnt);
-					debug.write(buf, 0, cnt);
+//					debug.write(buf, 0, cnt);
 					cnt = serverIs.read(buf);
 				}
 				browserOs.flush();
-				String body = "?";
-				try {
-					if (contentEncoding.equals("gzip")) {
-						byte[] gzipBytes = debug.toByteArray();
-						InputStream gzIs = new ByteArrayInputStream(gzipBytes);
-						GZIPInputStream gis = new GZIPInputStream(gzIs);
-						ByteArrayOutputStream debug2 = new ByteArrayOutputStream();
-						cnt = gis.read(buf);
-						while (cnt > 0) {
-							debug2.write(buf, 0, cnt);
-							cnt = gis.read(buf);
-						}
-						body = debug2.toString(charset);
-					}
-					else {
-						body = debug.toString(charset);
-					}
-				}
-				catch (Exception e) {
-					body = e.toString();
-				}
-				logRsp("-----  BODY -----\n", body);
-				logRsp("-----------------");
+//				String body = "?";
+//				try {
+//					if (contentEncoding.equals("gzip")) {
+//						byte[] gzipBytes = debug.toByteArray();
+//						InputStream gzIs = new ByteArrayInputStream(gzipBytes);
+//						GZIPInputStream gis = new GZIPInputStream(gzIs);
+//						ByteArrayOutputStream debug2 = new ByteArrayOutputStream();
+//						cnt = gis.read(buf);
+//						while (cnt > 0) {
+//							debug2.write(buf, 0, cnt);
+//							cnt = gis.read(buf);
+//						}
+//						body = debug2.toString(charset);
+//					}
+//					else {
+//						body = debug.toString(charset);
+//					}
+//				}
+//				catch (Exception e) {
+//					body = e.toString();
+//				}
+//				logRsp("-----  BODY -----\r\n", body);
+//				logRsp("-----------------");
 			}
 			browserOs.close();
 		}

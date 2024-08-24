@@ -1,4 +1,4 @@
-package de.hechler.interceptor;
+package de.hechler.interceptor.https;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -20,7 +20,9 @@ public class CharThenByteInputStream extends InputStream {
 	private boolean encodingOk;
 	private boolean closed;
 	
-	public CharThenByteInputStream(InputStream delegate, Charset charset) {
+	private StreamLogger rlog;
+	
+	public CharThenByteInputStream(String id, InputStream delegate, Charset charset) {
 		this.delegate = delegate;
 		this.charset = charset;
 		this.buffer = new byte[32768];
@@ -32,7 +34,7 @@ public class CharThenByteInputStream extends InputStream {
 		this.overrunBufSize = 0;
 		this.encodingOk = true;
 		this.closed = false;
-		
+		this.rlog = new StreamLogger(id);
 	}
 
 	public String readLine() throws IOException {
@@ -123,9 +125,11 @@ public class CharThenByteInputStream extends InputStream {
 		int cnt = delegate.read(buffer);
 		if (cnt == -1) {
 			this.closed = true;
+			rlog.close();
 		}
 		bufPos = 0;
 		bufSize = cnt;
+		rlog.write(buffer, bufPos, bufSize);
 	}
 
 	private void fillOverrun() {
