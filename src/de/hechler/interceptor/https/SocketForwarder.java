@@ -19,8 +19,11 @@ public class SocketForwarder {
 
 	private ServerSocket serverSocket;
 
+	private boolean allowParallelStreams;
 	
-	public SocketForwarder(int localPort, String targetHost, int targetPort) {
+	public SocketForwarder(int localPort, String targetHost, int targetPort, boolean allowParallelStreams) {
+		
+		this.allowParallelStreams = allowParallelStreams;
 		
 		try {
 			// Create the Server Socket for the Proxy
@@ -93,19 +96,20 @@ public class SocketForwarder {
 
 				requestCS.start();
 				responseCS.start();
-				
-				while (requestCS.isAlive() || responseCS.isAlive()) {
-					Thread.sleep(1000);
+				if (!allowParallelStreams) {
+					while (requestCS.isAlive() || responseCS.isAlive()) {
+						Thread.sleep(1000);
+					}
+					
+					try {
+						sourceSocket.close();
+					}
+					catch (Exception e) {}
+					try {
+						targetSocket.close();
+					}
+					catch (Exception e) {}
 				}
-				
-				try {
-					sourceSocket.close();
-				}
-				catch (Exception e) {}
-				try {
-					targetSocket.close();
-				}
-				catch (Exception e) {}
 				
 			} catch (SocketException e) {
 				e.printStackTrace();
@@ -122,7 +126,7 @@ public class SocketForwarder {
 	public static void main(String[] args) {
 		// Create an instance of Proxy and begin listening for connections
 		StreamLogger.setOutputFolder("./socketlog/"+Utils.now());
-		SocketForwarder forwarder = new SocketForwarder(SOURCE_PORT, TARGET_HOST, TARGET_PORT);
+		SocketForwarder forwarder = new SocketForwarder(SOURCE_PORT, TARGET_HOST, TARGET_PORT, true);
 		forwarder.listen();	
 	}
 	

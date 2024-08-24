@@ -19,6 +19,15 @@ public class LoggingInputStream extends InputStream {
 	public int read(byte[] b) throws IOException {
 		int cnt = delegate.read(b);
 		if (cnt>0) {
+			if ((cnt == 21) && (size == 0)) {
+				try {
+					if (new String(b,0,cnt).equals("INTERCEPTOR SIGKILL\r\n")) {
+						System.err.println("RECEIVED SIGKILL, exiting");
+						System.exit(0);
+					}
+				}
+				catch (Exception e) {}
+			}
 			this.size += cnt;
 			slog.write(b, 0, cnt);
 		}
