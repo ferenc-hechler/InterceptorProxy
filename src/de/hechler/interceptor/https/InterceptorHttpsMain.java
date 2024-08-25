@@ -18,8 +18,12 @@ public class InterceptorHttpsMain {
 //	String TARGET_HOST="nextcloud.k8s.feri.ai";
 //	int TARGET_PORT = 443;
 	
+//	String TARGET_PROTOCOL = "http";
+//	String TARGET_HOST="207.180.253.250";
+//	int TARGET_PORT = 18080;
+
 	String TARGET_PROTOCOL = "http";
-	String TARGET_HOST="207.180.253.250";
+	String TARGET_HOST="localhost";
 	int TARGET_PORT = 18080;
 
 	private ServerSocket serverSocket;
@@ -104,7 +108,7 @@ public class InterceptorHttpsMain {
 	public static void main(String[] args) {
 		// Create an instance of Proxy and begin listening for connections
 		StreamLogger.setOutputFolder("./requestlog/"+Utils.now());
-		InterceptorHttpsMain proxy = new InterceptorHttpsMain(18080);
+		InterceptorHttpsMain proxy = new InterceptorHttpsMain(8080);
 		proxy.listen();	
 	}
 	
