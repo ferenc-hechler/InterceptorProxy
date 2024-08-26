@@ -4,7 +4,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.channels.UnsupportedAddressTypeException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -98,25 +97,20 @@ public class HttpStream extends InputStream {
 			line = delegate.readLine();
 		}
 	}
-	
-	public String readStringBody() throws IOException {
+
+	public InputStream getBodyInputStream() throws IOException {
 		String contentLengthStr = getHeaderField("content-length", "-1");
 		String contentEncoding = getHeaderField("content-encoding", "none");
 		String transferEncoding = getHeaderField("transfer-encoding", "none");
-		String contentType = getHeaderField("content-type");
 
 		long contentLength = Long.parseLong(contentLengthStr);
 		boolean gzip = contentEncoding.equals("gzip");
 		boolean chunked = transferEncoding.equals("chunked");
 
-		Charset charset = StandardCharsets.ISO_8859_1;
-		if (contentType != null) {
-			if (contentType.matches(CT_CHARSET_RX)) {
-				String charset_text = contentType.replaceAll(CT_CHARSET_RX, "$2");
-				charset = Charset.forName(charset_text);
-			}
+		if ((contentLength == -1) && !chunked) {
+			return null;    // TODO: support for new HTTP 2 chunks
 		}
-
+ 		
 		InputStream is;
 		if (chunked) {
 			is = delegate.getChunkedInputStream();
@@ -130,9 +124,23 @@ public class HttpStream extends InputStream {
 		if (gzip) {
 			is = new GZIPInputStream(is);
 		}
+		return is;
+	}
 
-		int initialSize = contentLength==-1 ? 32768 : (int) Math.min(1024*1024, contentLength);
-		ByteArrayOutputStream baos = new ByteArrayOutputStream((int) initialSize);
+	public String readStringBody() throws IOException {
+		String contentType = getHeaderField("content-type");
+		Charset charset = StandardCharsets.ISO_8859_1;
+		if (contentType != null) {
+			if (contentType.matches(CT_CHARSET_RX)) {
+				String charset_text = contentType.replaceAll(CT_CHARSET_RX, "$2");
+				charset = Charset.forName(charset_text);
+			}
+		}
+		InputStream is = getBodyInputStream();
+		if (is == null) {
+			return "";
+		}
+		ByteArrayOutputStream baos = new ByteArrayOutputStream(32768);
 		is.transferTo(baos);
 		return baos.toString(charset);
 	}
@@ -208,8 +216,8 @@ public class HttpStream extends InputStream {
 	public static void main(String[] args) throws IOException {
 //		HttpStream httpIn = new HttpStream(new FileInputStream("C:\\Users\\feri\\git\\InterceptorProxy\\socketlog\\20240824223205_sequential\\0001-response.log"));
 //		HttpStream httpIn = new HttpStream(new FileInputStream("C:\\Users\\feri\\git\\InterceptorProxy\\socketlog\\20240824223205_sequential\\0001-request.log"));
-//		HttpStream httpIn = new HttpStream(new FileInputStream("C:\\Users\\A307131\\git\\InterceptorProxy\\socketlog\\20240826104533\\0007-request.log"));
-		HttpStream httpIn = new HttpStream(new FileInputStream("C:\\Users\\A307131\\git\\InterceptorProxy\\socketlog\\20240826104533\\0007-response.log"));
+		HttpStream httpIn = new HttpStream(new FileInputStream("C:\\Users\\A307131\\git\\InterceptorProxy\\socketlog\\20240826104533\\0007-request.log"));
+//		HttpStream httpIn = new HttpStream(new FileInputStream("C:\\Users\\A307131\\git\\InterceptorProxy\\socketlog\\20240826104533\\0007-response.log"));
 		int cnt=1;
 		System.out.println("PROCESSING block "+cnt);
 		System.out.println();
