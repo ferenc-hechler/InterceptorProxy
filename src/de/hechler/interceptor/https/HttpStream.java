@@ -134,16 +134,6 @@ public class HttpStream extends InputStream {
 		int initialSize = contentLength==-1 ? 32768 : (int) Math.min(1024*1024, contentLength);
 		ByteArrayOutputStream baos = new ByteArrayOutputStream((int) initialSize);
 		is.transferTo(baos);
-		if (chunked) {
-			String zero = delegate.readLine();
-			if (!zero.trim().equals("0")) {
-				throw new UnsupportedOperationException("expected closing 0 chunk size");
-			}
-			String blankLine = delegate.readLine();
-			if (!blankLine.isBlank()) {
-				throw new UnsupportedOperationException("expected blank line after closing 0 chunk size");
-			}
-		}
 		return baos.toString(charset);
 	}
 

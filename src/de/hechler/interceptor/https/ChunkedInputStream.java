@@ -18,6 +18,7 @@ public class ChunkedInputStream extends InputStream {
 	private byte[] oneByte;
 
 	private int chunksCount;
+	private int nextChunkSize;
 	private long totalSize;
 	
 	
@@ -29,6 +30,7 @@ public class ChunkedInputStream extends InputStream {
 		this.bufSize = 0;
 		this.oneByte = new byte[1];
 		this.chunksCount = 0;
+		this.nextChunkSize = -1;
 		this.totalSize = 0;
 	}
 
@@ -39,18 +41,17 @@ public class ChunkedInputStream extends InputStream {
 		chunksCount++;
 		bufPos = 0;
 		bufSize = 0;
-		String hexChunkSize = delegate.readLine();
-		// TODO: support for metadata after chunkSize: "1faa; comment="first chunk"
-		int chunkSize = Integer.parseInt(hexChunkSize, 16);
+		int chunkSize = nextChunkSize;
+		nextChunkSize = -1;
+		if (chunkSize == -1) {
+			String hexChunkSize = delegate.readLine();
+			// TODO: support for metadata after chunkSize: "1faa; comment="first chunk"
+			chunkSize = Integer.parseInt(hexChunkSize, 16);
+		}
 		if (chunkSize > buffer.length) {
 			buffer = new byte[chunkSize];
 		}
 		if (chunkSize == 0) {
-			String blankLine = delegate.readLine();
-			if (!blankLine.isBlank()) {
-				// TODO: support for trailers missing
-				throw new UnsupportedOperationException("expected blank line after chunk "+ chunksCount);
-			}
 			return;
 		}
 		while (bufSize < chunkSize) {
@@ -67,6 +68,17 @@ public class ChunkedInputStream extends InputStream {
 			throw new UnsupportedOperationException("expected blank line after chunk "+ chunksCount);
 		}
 		totalSize += chunkSize;
+		String hexChunkSize = delegate.readLine();
+		// TODO: support for metadata after chunkSize: "1faa; comment="first chunk"
+		nextChunkSize = Integer.parseInt(hexChunkSize, 16);
+		if (nextChunkSize==0) {
+			blankLine = delegate.readLine();
+			if (!blankLine.isBlank()) {
+				// TODO: support for trailers missing
+				throw new UnsupportedOperationException("expected blank line after final 0 chunk #"+chunksCount);
+			}
+		}
+
 	}
 	
 	@Override
