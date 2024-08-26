@@ -39,16 +39,19 @@ public class HttpConnector extends Thread {
 	private HttpStream targetIn;
 	private HttpOutStream targetOut;
 
+	private boolean rewriteHost;
+	
 	private Exception lastErr;
+	
 
-	public HttpConnector(Socket clientSocket, String targetHost, int targetPort) {
+	public HttpConnector(Socket clientSocket, String targetHost, int targetPort, boolean rewriteHost) {
 		this.id = String.format("%04d", nextId.incrementAndGet());
 		this.clientSocket = clientSocket;
 		this.targetHost = targetHost;
 		this.targetPort = targetPort;
 		String portSuffix = ((this.targetPort==80)||(this.targetPort==443)) ? "" : ":"+this.targetPort;
 		this.targetHostPort = this.targetHost + portSuffix;
-
+		this.rewriteHost = rewriteHost;
 	}
 
 	private void log(String type, Object... msgs) {
@@ -101,7 +104,7 @@ public class HttpConnector extends Thread {
 		        for (String key : browserIn.keys()) {
 		        	List<String> values = browserIn.getHeaderFields(key);
 		        	for (String value:values) {
-			        	if (key.equalsIgnoreCase("host")) {
+			        	if (rewriteHost && key.equalsIgnoreCase("host")) {
 			        		value = targetHostPort;
 			        	}
 			        	targetOut.setHeaderField(key, value);
@@ -113,15 +116,22 @@ public class HttpConnector extends Thread {
 		        	ByteArrayOutputStream baos = new ByteArrayOutputStream(32768);
 		        	bodyIs.transferTo(baos);
 
+					logReq("writing "+baos.size()+" bytes");
 		        	OutputStream bodyOs = targetOut.getOutputStream(baos.size(), false, false);
 		        	bodyOs.write(baos.toByteArray());
+
 		        }
+	        	else {
+					logReq("sending header only");
+	        		targetOut.sendHeaderWithoutContent();
+	        	}
 
 				targetIn.readRequestResponseLine();
 				int responseCode = targetIn.getResponseCode();
 				String responseMessage = targetIn.getResponseMessage();
 				version = targetIn.getVersion();
-
+				logRsp(responseCode+" "+responseMessage);
+				
 				browserOut.startResponse(version, responseCode, responseMessage);
 				
 				targetIn.readHeaderParams();
@@ -137,9 +147,14 @@ public class HttpConnector extends Thread {
 		        	ByteArrayOutputStream baos = new ByteArrayOutputStream(32768);
 		        	bodyIs.transferTo(baos);
 
+					logRsp("writing "+baos.size()+" bytes");
 		        	OutputStream bodyOs = browserOut.getOutputStream(baos.size(), false, false);
 		        	bodyOs.write(baos.toByteArray());
 		        }
+	        	else {
+					logRsp("sending header only");
+	        		browserOut.sendHeaderWithoutContent();
+	        	}
 			}
 		}
 		catch (Exception e) {

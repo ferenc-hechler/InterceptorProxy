@@ -84,8 +84,13 @@ public class HttpOutStream {
 		headerKeys.remove(key.toLowerCase());
 	}
 	
-	
-	public void sendHeader() throws IOException {
+
+	public void sendHeaderWithoutContent() throws IOException {
+		internSendHeader();
+		contentSentCallback();
+	}
+
+	public void internSendHeader() throws IOException {
 		StringBuilder headerText = new StringBuilder();
 		String requestResponseLine; 
 		if (method != null) {
@@ -130,13 +135,14 @@ public class HttpOutStream {
 		else {
 			removeHeaderField("Content-Encoding");
 		}
-		sendHeader();
+		internSendHeader();
 		bodyOs = new SizedOutputStream(delegate, contentSize, ()->contentSentCallback());
 		return bodyOs;
 	}
 	
 	private void contentSentCallback() {
 		try {
+			System.out.println("    [r  ]: body finished");
 			delegate.flush();
 			reset();
 		} catch (IOException e) {

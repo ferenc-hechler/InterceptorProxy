@@ -3,7 +3,6 @@ package de.hechler.interceptor.https;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
-import java.util.concurrent.Callable;
 
 public class SizedOutputStream extends OutputStream {
 

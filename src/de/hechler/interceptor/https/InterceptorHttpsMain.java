@@ -77,8 +77,8 @@ public class InterceptorHttpsMain {
 				// serverSocket.accpet() Blocks until a connection is made
 				Socket socket = serverSocket.accept();
 				
-				HttpsConnector httpsCon = new HttpsConnector(socket, TARGET_PROTOCOL, TARGET_HOST, TARGET_PORT);
-//				HttpConnector httpsCon = new HttpConnector(socket, TARGET_PROTOCOL, TARGET_HOST, TARGET_PORT);
+//				HttpsConnector httpsCon = new HttpsConnector(socket, TARGET_PROTOCOL, TARGET_HOST, TARGET_PORT);
+				HttpConnector httpsCon = new HttpConnector(socket, TARGET_HOST, TARGET_PORT, false);
 				httpsCon.start();
 				
 			} catch (SocketException e) {
