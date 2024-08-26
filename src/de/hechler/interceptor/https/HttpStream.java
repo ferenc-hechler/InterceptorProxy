@@ -18,7 +18,7 @@ import java.util.zip.GZIPInputStream;
  * https://beeceptor.com/docs/concepts/http-headers/
  * https://developer.mozilla.org/en-US/docs/Glossary/Request_header
  */
-public class HttpStream extends InputStream {
+public class HttpStream {
 
 	
 	private static final String REQUEST_LINE_RX   = "^(GET|POST) ([^ ]+) HTTP/([0-9.]+)$";
@@ -208,11 +208,6 @@ public class HttpStream extends InputStream {
 	}
 	
 	
-	@Override
-	public int read() throws IOException {
-		throw new UnsupportedOperationException();
-	}
-
 	public boolean isRequest() {
 		return isRequest;
 	}

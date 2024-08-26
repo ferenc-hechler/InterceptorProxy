@@ -6,6 +6,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.Socket;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -16,11 +17,16 @@ public class HttpsConnector extends Thread {
 
 	private static AtomicInteger nextId = new AtomicInteger();
 	
-	private static final Set<String> IGNORE_HEADER_FIELDS = new HashSet<>(Arrays.asList(
-			"content-length", "content-encoding", "transfer-encoding"
-			// "accept-encoding"
+	private static final Set<String> IGNORE_REQUEST_HEADER_FIELDS = new HashSet<>(Arrays.asList(
+			"content-length", "content-encoding", "transfer-encoding", "accept-encoding"
 		));
 	
+	private static final Set<String> IGNORE_RESPONSE_HEADER_FIELDS = new HashSet<>(Arrays.asList(
+			"accept-encoding"
+		));
+	
+
+	private static String endl = "\r\n";
 	
 	private String id; 
 	
@@ -44,12 +50,11 @@ public class HttpsConnector extends Thread {
 		this.targetProtocol = targetProtocol;
 		this.targetHost = targetHost;
 		this.targetPort = targetPort;
-		String portSuffix = ((targetPort==80)||(targetPort==443)) ? "" : ":"+targetPort;
-		this.targetHostPort = targetHost + portSuffix;
+		String portSuffix = ((this.targetPort==80)||(this.targetPort==443)) ? "" : ":"+this.targetPort;
+		this.targetHostPort = this.targetHost + portSuffix;
 
 	}
 
-	
 	private void log(String type, Object... msgs) {
 		StringBuilder line = new StringBuilder(256);
 		line.append(id).append('[').append(type).append("]").append(": ");
@@ -81,7 +86,7 @@ public class HttpsConnector extends Thread {
 //			clientSocket.setSoTimeout(2000);
 			logReq("creating input stream "+id);
 			browserIn = new HttpStream(new LoggingInputStream(id+"-request", clientSocket.getInputStream()));
-			browserOs = clientSocket.getOutputStream();
+			browserOs = new LoggingOutputStream(id+"-response", clientSocket.getOutputStream());
 			
 			while (browserIn.readRequestResponseLine()) {
 				browserIn.readHeaderParams();
@@ -97,7 +102,7 @@ public class HttpsConnector extends Thread {
 		        connection.setRequestMethod(method);
 
 		        for (String key : browserIn.keys()) {
-		        	if (IGNORE_HEADER_FIELDS.contains(key.toLowerCase())) {
+		        	if (IGNORE_REQUEST_HEADER_FIELDS.contains(key.toLowerCase())) {
 		        		continue;
 		        	}
 		        	List<String> values = browserIn.getHeaderFields(key);
@@ -121,75 +126,40 @@ public class HttpsConnector extends Thread {
 				int responseCode = connection.getResponseCode();
 				String responseMessage = connection.getResponseMessage();
 
-				connection.getHeaderField(null);
+        		logRsp("IGNORE <null>=",connection.getHeaderField(null));
 				
 				String responseLine = "HTTP/"+browserIn.getVersion()+" "+responseCode+" "+responseMessage;
 				logRsp(responseLine);
 				browserWriteline(responseLine);
 
-				String contentEncoding = "?";
+				boolean hasContent = false;
+				
 		        for (String key : connection.getHeaderFields().keySet()) {
 		        	List<String> values = connection.getHeaderFields().get(key);
 		        	if (key == null) {
-		        		logRsp("IGNORE <null>=",values);
 		        		continue;
 		        	}
-		        	else if (key.equalsIgnoreCase("Transfer-Encoding")) {
-		        		logRsp("IGNORE ",key,"=",values);
+		        	if (key.equalsIgnoreCase("content-length")) {
+		        		hasContent = true; 
+		        	}
+		        	if (key.equalsIgnoreCase("transfer-encoding")) {
+		        		hasContent = true; 
+		        	}
+		        	if (IGNORE_RESPONSE_HEADER_FIELDS.contains(key.toLowerCase())) {
 		        		continue;
 		        	}
-		        	else if (key.equalsIgnoreCase("Content-Encoding")) {
-		        		logRsp("INFO ",key,"=",values);
-		        		contentEncoding = values.get(0);
-		        		continue;
-		        	}
-	        		logRsp(key,"=",values);
 	        		for (String value : values) {
 	        			browserWriteline(key+": "+value);
 	        		}
 		        }
 		        browserWriteline("");
 		        
-				if (responseCode == HttpURLConnection.HTTP_OK) { // success
+				if (hasContent) {             // responseCode == HttpURLConnection.HTTP_OK) { 
 			        InputStream serverIs = connection.getInputStream();
-
-//			        ByteArrayOutputStream debug = new ByteArrayOutputStream();
-
-			        byte[] buf = new byte[32768];
-					int cnt = serverIs.read(buf);
-					while (cnt > 0) {
-						browserOs.write(buf, 0, cnt);
-//						debug.write(buf, 0, cnt);
-						cnt = serverIs.read(buf);
-					}
+			        serverIs.transferTo(browserOs);
 					browserOs.flush();
-//					String body = "?";
-//					try {
-//						if (contentEncoding.equals("gzip")) {
-//							byte[] gzipBytes = debug.toByteArray();
-//							InputStream gzIs = new ByteArrayInputStream(gzipBytes);
-//							GZIPInputStream gis = new GZIPInputStream(gzIs);
-//							ByteArrayOutputStream debug2 = new ByteArrayOutputStream();
-//							cnt = gis.read(buf);
-//							while (cnt > 0) {
-//								debug2.write(buf, 0, cnt);
-//								cnt = gis.read(buf);
-//							}
-//							body = debug2.toString(charset);
-//						}
-//						else {
-//							body = debug.toString(charset);
-//						}
-//					}
-//					catch (Exception e) {
-//						body = e.toString();
-//					}
-//					logRsp("-----  BODY -----\r\n", body);
-//					logRsp("-----------------");
+					serverIs.close();
 				}
-				browserOs.close();
-		        
-		        
 			}
 			
 		}
@@ -200,138 +170,12 @@ public class HttpsConnector extends Thread {
 		}
 	}
 	
-	
-	public void connect() {
-			
-			
-		}
-
-	}
-
-	/**
-	 * 
-	 * @param hostname
-	 * @param port
-	 */
-	public void connect(String protocol, String hostname, int port) {
-		if (path == null) {
-			return;
-		}
-		try {
-			String portSuffix = port==443 ? "" : ":"+port;
-
-	        URL url = new URL(protocol+"://"+hostname+portSuffix+path);
-	        System.out.println("URL: "+url);
-	        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-
-	        connection.setRequestMethod(method);
-        	String host = "?"; 
-	        for (String key : header.keySet()) {
-	        	String value = header.get(key);
-	        	if (key.equalsIgnoreCase("host")) {
-	        		host = header.get(key);
-	        	}
-	        	else if (key.equalsIgnoreCase("Accept-Encoding")) {
-	        		logReq("skipping "+key+" = "+value);
-	        	}
-	        	else {
-		        	connection.setRequestProperty(key, value);
-	        	}
-	        }
-	        
-	        if (method.equals("POST")) {
-	        	byte[] buffer = new byte[32768];
-	        	connection.setDoOutput(true);
-	        	OutputStream serverOs = connection.getOutputStream();
-	        	int cnt = browserIn.read(buffer);
-	        	while (cnt > 0) {
-	        		logReq("BODY=",new String(buffer, 0, cnt));
-	        		serverOs.write(buffer, 0, cnt);
-	        		// TODO stream in thread
-		        	// cnt = browserIn.read(buffer);
-	        		cnt = -1;
-	        	}
-	        	serverOs.flush();
-	        	serverOs.close();
-	        }
-	        
-			int responseCode = connection.getResponseCode();
-			String responseMessage = connection.getResponseMessage();
-			logRsp("HTTP Response: ", responseCode, " - ", responseMessage);
-			
-			browserWriteline("HTTP/"+httpVersion+" "+responseCode+" "+responseMessage);
-			String contentEncoding = "?";
-	        for (String key : connection.getHeaderFields().keySet()) {
-	        	List<String> values = connection.getHeaderFields().get(key);
-	        	if (key == null) {
-	        		logRsp("IGNORE <null>=",values);
-	        		continue;
-	        	}
-	        	else if (key.equalsIgnoreCase("Transfer-Encoding")) {
-	        		logRsp("IGNORE ",key,"=",values);
-	        		continue;
-	        	}
-	        	else if (key.equalsIgnoreCase("Content-Encoding")) {
-	        		logRsp("INFO ",key,"=",values);
-	        		contentEncoding = values.get(0);
-	        		continue;
-	        	}
-        		logRsp(key,"=",values);
-        		for (String value : values) {
-        			browserWriteline(key+": "+value);
-        		}
-	        }
-	        browserWriteline("");
-	        
-			if (responseCode == HttpURLConnection.HTTP_OK) { // success
-		        InputStream serverIs = connection.getInputStream();
-
-//		        ByteArrayOutputStream debug = new ByteArrayOutputStream();
-
-		        byte[] buf = new byte[32768];
-				int cnt = serverIs.read(buf);
-				while (cnt > 0) {
-					browserOs.write(buf, 0, cnt);
-//					debug.write(buf, 0, cnt);
-					cnt = serverIs.read(buf);
-				}
-				browserOs.flush();
-//				String body = "?";
-//				try {
-//					if (contentEncoding.equals("gzip")) {
-//						byte[] gzipBytes = debug.toByteArray();
-//						InputStream gzIs = new ByteArrayInputStream(gzipBytes);
-//						GZIPInputStream gis = new GZIPInputStream(gzIs);
-//						ByteArrayOutputStream debug2 = new ByteArrayOutputStream();
-//						cnt = gis.read(buf);
-//						while (cnt > 0) {
-//							debug2.write(buf, 0, cnt);
-//							cnt = gis.read(buf);
-//						}
-//						body = debug2.toString(charset);
-//					}
-//					else {
-//						body = debug.toString(charset);
-//					}
-//				}
-//				catch (Exception e) {
-//					body = e.toString();
-//				}
-//				logRsp("-----  BODY -----\r\n", body);
-//				logRsp("-----------------");
-			}
-			browserOs.close();
-		}
-		catch (Exception e) {
-			lastErr = e;
-			log("exc", e.toString());
-			e.printStackTrace();
-		}
-	}
-
 	private void browserWriteline(String line) throws IOException {
-		browserOs.write((line+endl).getBytes(charset));
+		browserOs.write((line+endl).getBytes(StandardCharsets.ISO_8859_1));
 	}
 
+	public Exception getLastError() {
+		return lastErr;
+	}
 
 }

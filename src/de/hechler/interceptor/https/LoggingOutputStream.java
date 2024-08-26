@@ -2,7 +2,6 @@ package de.hechler.interceptor.https;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.charset.Charset;
 
 public class LoggingOutputStream extends OutputStream {
 
@@ -10,7 +9,7 @@ public class LoggingOutputStream extends OutputStream {
 	private OutputStream delegate;
 	private StreamLogger slog;
 	
-	public LoggingOutputStream(String id, OutputStream delegate, Charset charset) {
+	public LoggingOutputStream(String id, OutputStream delegate) {
 		this.delegate = delegate;
 		this.slog = new StreamLogger(id);
 	}

@@ -11,26 +11,15 @@ import java.nio.charset.StandardCharsets;
 
 public class InterceptorHttpsMain {
 
-//	String TARGET_HOST="127.0.0.1";
-//	int TARGET_PORT = 5000;
-
-//	String TARGET_PROTOCOL = "https"
-//	String TARGET_HOST="nextcloud.k8s.feri.ai";
-//	int TARGET_PORT = 443;
-	
-//	String TARGET_PROTOCOL = "http";
-//	String TARGET_HOST="207.180.253.250";
-//	int TARGET_PORT = 18080;
-
 	String TARGET_PROTOCOL = "http";
-	String TARGET_HOST="localhost";
+	String TARGET_HOST="207.180.253.250";
 	int TARGET_PORT = 18080;
 
+//	String TARGET_PROTOCOL = "http";
+//	String TARGET_HOST="localhost";
+//	int TARGET_PORT = 18080;
+
 	private ServerSocket serverSocket;
-	/**
-	 * Semaphore for Proxy and Consolee Management System.
-	 */
-	private volatile boolean running = true;
 
 	
 	public InterceptorHttpsMain(int port) {
@@ -61,7 +50,6 @@ public class InterceptorHttpsMain {
 			// Set the timeout
 			//serverSocket.setSoTimeout(100000);	// debug
 			System.out.println("Waiting for client on port " + serverSocket.getLocalPort() + "..");
-			running = true;
 		} 
 
 		// Catch exceptions associated with opening socket
@@ -84,13 +72,13 @@ public class InterceptorHttpsMain {
 	 * Creates a new thread to handle the request and passes it the socket connection and continues listening.
 	 */
 	public void listen(){
-
-		while(running){
+		while (true) {
 			try {
 				// serverSocket.accpet() Blocks until a connection is made
 				Socket socket = serverSocket.accept();
 				
 				HttpsConnector httpsCon = new HttpsConnector(socket, TARGET_PROTOCOL, TARGET_HOST, TARGET_PORT);
+//				HttpConnector httpsCon = new HttpConnector(socket, TARGET_PROTOCOL, TARGET_HOST, TARGET_PORT);
 				httpsCon.start();
 				
 			} catch (SocketException e) {
