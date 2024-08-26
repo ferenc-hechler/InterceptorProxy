@@ -1,52 +1,55 @@
 package de.hechler.interceptor.https;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.Socket;
 import java.net.URL;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.zip.GZIPInputStream;
 
-public class HttpsConnector {
+public class HttpsConnector extends Thread {
 
 	private static AtomicInteger nextId = new AtomicInteger();
+	
+	private static final Set<String> IGNORE_HEADER_FIELDS = new HashSet<>(Arrays.asList(
+			"content-length", "content-encoding", "transfer-encoding"
+			// "accept-encoding"
+		));
+	
+	
 	private String id; 
 	
 	private Socket clientSocket;
-	private CharThenByteInputStream browserIn;
+	private HttpStream browserIn;
 	private OutputStream browserOs;
 	
-	private String method;
-	private String path;
-	private String httpVersion;
-	private String requestBody;
-
-	private Map<String, String> header;
+	private String targetProtocol;
+	private String targetHost;
+	private int targetPort;
+	private String targetHostPort;
+	
 	private Exception lastErr;
 
-	private String endl;
-	private Charset charset;
-	
 	HttpURLConnection serverConn;
-	InputStream serverIs;
+	HttpStream serverIn;
 	
-	public HttpsConnector(Socket clientSocket) {
-		this.id = Integer.toString(nextId.incrementAndGet());
+	public HttpsConnector(Socket clientSocket, String targetProtocol, String targetHost, int targetPort) {
+		this.id = String.format("%04d", nextId.incrementAndGet());
 		this.clientSocket = clientSocket;
-		this.header = new HashMap<>();
-		this.charset = StandardCharsets.UTF_8;
-		this.endl = "\r\n";
+		this.targetProtocol = targetProtocol;
+		this.targetHost = targetHost;
+		this.targetPort = targetPort;
+		String portSuffix = ((targetPort==80)||(targetPort==443)) ? "" : ":"+targetPort;
+		this.targetHostPort = targetHost + portSuffix;
+
 	}
 
+	
 	private void log(String type, Object... msgs) {
 		StringBuilder line = new StringBuilder(256);
 		line.append(id).append('[').append(type).append("]").append(": ");
@@ -67,82 +70,145 @@ public class HttpsConnector {
 	}
 	private void logReq(Object... msgs) { log("req", msgs); }
 	private void logRsp(Object... msgs) { log("rsp", msgs); }
-
-	// https://beeceptor.com/docs/concepts/http-headers/
-	// https://developer.mozilla.org/en-US/docs/Glossary/Request_header
-	
-	private static final String REQUEST_LINE_RX   = "^(GET|POST) ([^ ]+) HTTP/([0-9.]+)$";
-	private static final String HEADER_FIELD_RX   = "^([^:]+):\\s*(.*)$";
-	
-//			RQ: GET / HTTP/1.1
-//			RQ: Host: 127.0.0.1:5000
-//			RQ: User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0
-//			RQ: Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/png,image/svg+xml,*/*;q=0.8
-//			RQ: Accept-Language: en-US,en;q=0.5
-//			RQ: Accept-Encoding: gzip, deflate, br, zstd
-//			RQ: Connection: keep-alive
-//			RQ: Cookie: username-localhost-8888="2|1:0|10:1723619162|23:username-localhost-8888|196:eyJ1c2VybmFtZSI6ICJiMWVlZmYwYmQ4ZTA0ZTVkYjNkOGNhMDY2NGE2NDgyNyIsICJuYW1lIjogIkFub255bW91cyBTcG9uZGUiLCAiZGlzcGxheV9uYW1lIjogIkFub255bW91cyBTcG9uZGUiLCAiaW5pdGlhbHMiOiAiQVMiLCAiY29sb3IiOiBudWxsfQ==|9613c5bee36082b1cededd3dc5bdf84ba9238f5399ded615da2ff3fd6417aa8b"; _xsrf=2|68aabe25|a917b5a032109eb5f8866510d40ddee6|1723619162
-//			RQ: Upgrade-Insecure-Requests: 1
-//			RQ: Sec-Fetch-Dest: document
-//			RQ: Sec-Fetch-Mode: navigate
-//			RQ: Sec-Fetch-Site: none
-//			RQ: Sec-Fetch-User: ?1
-//			RQ: Priority: u=0, i
-//			RQ: 
-	public void readHeader() {
-		try {
-			String requestLine = browserIn.readLine();
-			if (!requestLine.matches(REQUEST_LINE_RX)) {
-				if (requestLine.equals("INTERCEPTOR SIGKILL")) {
-					System.err.println("received '"+requestLine+"', exiting");
-					System.exit(0);
-				}
-				throw new UnsupportedOperationException("unknown request line format '"+requestLine+"'");
-			}
-			method = requestLine.replaceAll(REQUEST_LINE_RX, "$1");
-			path = requestLine.replaceAll(REQUEST_LINE_RX, "$2");
-			httpVersion = requestLine.replaceAll(REQUEST_LINE_RX, "$3");
-			logReq("METHOD: ", method);
-			logReq("PATH: ", path);
-			logReq("HTTP-VERSION: ", httpVersion);
-			header = new HashMap<>();
-			String line = browserIn.readLine();
-			while ((line != null) && !line.isBlank()) {
-				if (!line.matches(HEADER_FIELD_RX)) {
-					throw new UnsupportedOperationException("unknown request line format '"+requestLine+"'");
-				}
-				String key = line.replaceAll(HEADER_FIELD_RX, "$1").trim();
-				String value = line.replaceAll(HEADER_FIELD_RX, "$2").trim();
-				header.put(key, value);
-				logReq("Header(",key,") = '",value,"'");
-				line = browserIn.readLine();
-			}
-		}
-		catch (Exception e) {
-			logReq(e.toString());
-			e.printStackTrace();
-			lastErr = e;
-		}
-	}
+	private void logERR(Object... msgs) { log("ERR", msgs); }
 
 	
-	public void readRequest() {
+	
+	
+	@Override
+	public void run() {
 		try {
 //			clientSocket.setSoTimeout(2000);
-			browserIn = new CharThenByteInputStream(id+"-request", clientSocket.getInputStream(), charset);
-			browserOs = new LoggingOutputStream(id+"-response", clientSocket.getOutputStream(), charset);
-			readHeader();
+			logReq("creating input stream "+id);
+			browserIn = new HttpStream(new LoggingInputStream(id+"-request", clientSocket.getInputStream()));
+			browserOs = clientSocket.getOutputStream();
+			
+			while (browserIn.readRequestResponseLine()) {
+				browserIn.readHeaderParams();
+
+				String path = browserIn.getPath();
+				String method = browserIn.getMethod();
+				
+				// see https://www.twilio.com/de-de/blog/5-moglichkeiten-fur-http-anfragen-java
+				// https://www.digitalocean.com/community/tutorials/java-httpurlconnection-example-java-http-request-get-post
+		        URL url = new URL(targetProtocol+"://"+targetHostPort+path);
+		        logReq("URL: ", url);
+		        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+		        connection.setRequestMethod(method);
+
+		        for (String key : browserIn.keys()) {
+		        	if (IGNORE_HEADER_FIELDS.contains(key.toLowerCase())) {
+		        		continue;
+		        	}
+		        	List<String> values = browserIn.getHeaderFields(key);
+		        	for (String value:values) {
+			        	if (key.equalsIgnoreCase("host")) {
+			        		value = targetHostPort;
+			        	}
+			        	connection.setRequestProperty(key, value);
+		        	}
+		        }
+		        
+		        if (method.equals("POST")) {
+		        	connection.setDoOutput(true);
+		        	OutputStream serverOs = connection.getOutputStream();
+		        	InputStream bodyIs = browserIn.getBodyInputStream();
+		        	bodyIs.transferTo(serverOs);
+		        	serverOs.flush();
+		        	serverOs.close();
+		        }
+
+				int responseCode = connection.getResponseCode();
+				String responseMessage = connection.getResponseMessage();
+
+				connection.getHeaderField(null);
+				
+				String responseLine = "HTTP/"+browserIn.getVersion()+" "+responseCode+" "+responseMessage;
+				logRsp(responseLine);
+				browserWriteline(responseLine);
+
+				String contentEncoding = "?";
+		        for (String key : connection.getHeaderFields().keySet()) {
+		        	List<String> values = connection.getHeaderFields().get(key);
+		        	if (key == null) {
+		        		logRsp("IGNORE <null>=",values);
+		        		continue;
+		        	}
+		        	else if (key.equalsIgnoreCase("Transfer-Encoding")) {
+		        		logRsp("IGNORE ",key,"=",values);
+		        		continue;
+		        	}
+		        	else if (key.equalsIgnoreCase("Content-Encoding")) {
+		        		logRsp("INFO ",key,"=",values);
+		        		contentEncoding = values.get(0);
+		        		continue;
+		        	}
+	        		logRsp(key,"=",values);
+	        		for (String value : values) {
+	        			browserWriteline(key+": "+value);
+	        		}
+		        }
+		        browserWriteline("");
+		        
+				if (responseCode == HttpURLConnection.HTTP_OK) { // success
+			        InputStream serverIs = connection.getInputStream();
+
+//			        ByteArrayOutputStream debug = new ByteArrayOutputStream();
+
+			        byte[] buf = new byte[32768];
+					int cnt = serverIs.read(buf);
+					while (cnt > 0) {
+						browserOs.write(buf, 0, cnt);
+//						debug.write(buf, 0, cnt);
+						cnt = serverIs.read(buf);
+					}
+					browserOs.flush();
+//					String body = "?";
+//					try {
+//						if (contentEncoding.equals("gzip")) {
+//							byte[] gzipBytes = debug.toByteArray();
+//							InputStream gzIs = new ByteArrayInputStream(gzipBytes);
+//							GZIPInputStream gis = new GZIPInputStream(gzIs);
+//							ByteArrayOutputStream debug2 = new ByteArrayOutputStream();
+//							cnt = gis.read(buf);
+//							while (cnt > 0) {
+//								debug2.write(buf, 0, cnt);
+//								cnt = gis.read(buf);
+//							}
+//							body = debug2.toString(charset);
+//						}
+//						else {
+//							body = debug.toString(charset);
+//						}
+//					}
+//					catch (Exception e) {
+//						body = e.toString();
+//					}
+//					logRsp("-----  BODY -----\r\n", body);
+//					logRsp("-----------------");
+				}
+				browserOs.close();
+		        
+		        
+			}
+			
 		}
 		catch (Exception e) {
 			lastErr = e;
-			log("exc", e.toString());
+			logERR(e.toString());
 			e.printStackTrace();
 		}
+	}
+	
+	
+	public void connect() {
+			
+			
+		}
+
 	}
 
 	/**
-	 * see https://www.twilio.com/de-de/blog/5-moglichkeiten-fur-http-anfragen-java
-	 * https://www.digitalocean.com/community/tutorials/java-httpurlconnection-example-java-http-request-get-post
 	 * 
 	 * @param hostname
 	 * @param port

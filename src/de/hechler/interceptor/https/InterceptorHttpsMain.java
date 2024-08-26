@@ -90,9 +90,8 @@ public class InterceptorHttpsMain {
 				// serverSocket.accpet() Blocks until a connection is made
 				Socket socket = serverSocket.accept();
 				
-				HttpsConnector httpsCon = new HttpsConnector(socket);
-				httpsCon.readRequest();
-				httpsCon.connect(TARGET_PROTOCOL, TARGET_HOST, TARGET_PORT);
+				HttpsConnector httpsCon = new HttpsConnector(socket, TARGET_PROTOCOL, TARGET_HOST, TARGET_PORT);
+				httpsCon.start();
 				
 			} catch (SocketException e) {
 				// Socket exception is triggered by management system to shut down the proxy 

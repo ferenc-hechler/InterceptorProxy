@@ -14,6 +14,10 @@ import java.util.Map;
 import java.util.zip.GZIPInputStream;
 
 
+/**
+ * https://beeceptor.com/docs/concepts/http-headers/
+ * https://developer.mozilla.org/en-US/docs/Glossary/Request_header
+ */
 public class HttpStream extends InputStream {
 
 	
@@ -181,7 +185,7 @@ public class HttpStream extends InputStream {
 		return values.get(0);
 	}
 
-	private Collection<String> keys() {
+	public Collection<String> keys() {
 		return headerKeysCase.values();
 	}
 	
