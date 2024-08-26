@@ -74,6 +74,7 @@ public class CharAndByteInputStream extends InputStream {
 			if (closed) {
 				return lineBuffer.toString(charset);
 			}
+			endlPos = findNextEndl();
 		}
 		String result;
 		if (lineBuffer != null && lineBuffer.size()>0) {
@@ -88,7 +89,7 @@ public class CharAndByteInputStream extends InputStream {
 		}
 		else {
 			int len = endlPos-bufPos;
-			if (len>1 && buffer[endlPos-1]=='\r') {
+			if (len>=1 && buffer[endlPos-1]=='\r') {
 				len--;
 			}
 			result = new String(buffer, bufPos, len, charset);
@@ -116,6 +117,10 @@ public class CharAndByteInputStream extends InputStream {
 
 	public InputStream getSizedInputStream(long size) {
 		return new SizedInputStream(this, size);
+	}
+
+	public InputStream getChunkedInputStream() {
+		return new ChunkedInputStream(this);
 	}
 	
 	public boolean isClosed() {

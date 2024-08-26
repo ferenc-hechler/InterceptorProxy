@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.channels.UnsupportedAddressTypeException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -99,15 +100,16 @@ public class HttpStream extends InputStream {
 	}
 	
 	public String readStringBody() throws IOException {
-		if (!hasHeaderField("content-length")) {
-			return null;
-		}
-		long contentLength = Long.parseLong(getHeaderField("content-length"));
-		String contentEncoding = getHeaderField("content-encoding");
-		boolean gzip = contentEncoding != null && contentEncoding.equals("gzip");
+		String contentLengthStr = getHeaderField("content-length", "-1");
+		String contentEncoding = getHeaderField("content-encoding", "none");
+		String transferEncoding = getHeaderField("transfer-encoding", "none");
+		String contentType = getHeaderField("content-type");
+
+		long contentLength = Long.parseLong(contentLengthStr);
+		boolean gzip = contentEncoding.equals("gzip");
+		boolean chunked = transferEncoding.equals("chunked");
 
 		Charset charset = StandardCharsets.ISO_8859_1;
-		String contentType = getHeaderField("content-type");
 		if (contentType != null) {
 			if (contentType.matches(CT_CHARSET_RX)) {
 				String charset_text = contentType.replaceAll(CT_CHARSET_RX, "$2");
@@ -115,12 +117,33 @@ public class HttpStream extends InputStream {
 			}
 		}
 
-		InputStream is = delegate.getSizedInputStream(contentLength);
+		InputStream is;
+		if (chunked) {
+			is = delegate.getChunkedInputStream();
+		}
+		else if (contentLength != -1) { 
+			is = delegate.getSizedInputStream(contentLength);
+		}
+		else {
+			throw new UnsupportedOperationException("no content-length given and transfer-encoding not chunked");
+		}
 		if (gzip) {
 			is = new GZIPInputStream(is);
 		}
-		ByteArrayOutputStream baos = new ByteArrayOutputStream((int)contentLength);
+
+		int initialSize = contentLength==-1 ? 32768 : (int) Math.min(1024*1024, contentLength);
+		ByteArrayOutputStream baos = new ByteArrayOutputStream((int) initialSize);
 		is.transferTo(baos);
+		if (chunked) {
+			String zero = delegate.readLine();
+			if (!zero.trim().equals("0")) {
+				throw new UnsupportedOperationException("expected closing 0 chunk size");
+			}
+			String blankLine = delegate.readLine();
+			if (!blankLine.isBlank()) {
+				throw new UnsupportedOperationException("expected blank line after closing 0 chunk size");
+			}
+		}
 		return baos.toString(charset);
 	}
 
@@ -146,8 +169,12 @@ public class HttpStream extends InputStream {
 	}
 
 	public String getHeaderField(String key) {
+		return getHeaderField(key, null);
+	}
+
+	public String getHeaderField(String key, String defaultValue) {
 		if (!hasHeaderField(key)) {
-			return null;
+			return defaultValue;
 		}
 		List<String> values = getHeaderFields(key);
 		if (values.size()>1) {
@@ -190,7 +217,9 @@ public class HttpStream extends InputStream {
 	
 	public static void main(String[] args) throws IOException {
 //		HttpStream httpIn = new HttpStream(new FileInputStream("C:\\Users\\feri\\git\\InterceptorProxy\\socketlog\\20240824223205_sequential\\0001-response.log"));
-		HttpStream httpIn = new HttpStream(new FileInputStream("C:\\Users\\feri\\git\\InterceptorProxy\\socketlog\\20240824223205_sequential\\0001-request.log"));
+//		HttpStream httpIn = new HttpStream(new FileInputStream("C:\\Users\\feri\\git\\InterceptorProxy\\socketlog\\20240824223205_sequential\\0001-request.log"));
+//		HttpStream httpIn = new HttpStream(new FileInputStream("C:\\Users\\A307131\\git\\InterceptorProxy\\socketlog\\20240826104533\\0007-request.log"));
+		HttpStream httpIn = new HttpStream(new FileInputStream("C:\\Users\\A307131\\git\\InterceptorProxy\\socketlog\\20240826104533\\0007-response.log"));
 		int cnt=1;
 		System.out.println("PROCESSING block "+cnt);
 		System.out.println();
@@ -208,6 +237,9 @@ public class HttpStream extends InputStream {
 			}
 			System.out.println();
 			String body = httpIn.readStringBody();
+			if (body.length()>200) {
+				body = body.substring(0, 190)+"..."+body.substring(body.length()-10, body.length());
+			}
 			System.out.println(body);
 			System.out.println();
 			cnt++;

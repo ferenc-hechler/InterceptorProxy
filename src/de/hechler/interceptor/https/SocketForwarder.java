@@ -13,8 +13,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class SocketForwarder {
 
-	public static int SOURCE_PORT = 18080;
-	public static String TARGET_HOST = "207.180.253.250";
+	public static int SOURCE_PORT = 18081;
+	//public static String TARGET_HOST = "207.180.253.250";
+	public static String TARGET_HOST = "localhost";
 	public static int TARGET_PORT = 18080;
 
 	private ServerSocket serverSocket;
@@ -126,7 +127,7 @@ public class SocketForwarder {
 	public static void main(String[] args) {
 		// Create an instance of Proxy and begin listening for connections
 		StreamLogger.setOutputFolder("./socketlog/"+Utils.now());
-		SocketForwarder forwarder = new SocketForwarder(SOURCE_PORT, TARGET_HOST, TARGET_PORT, true);
+		SocketForwarder forwarder = new SocketForwarder(SOURCE_PORT, TARGET_HOST, TARGET_PORT, false);
 		forwarder.listen();	
 	}
 	
