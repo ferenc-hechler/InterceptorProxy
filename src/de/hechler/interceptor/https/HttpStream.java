@@ -1,9 +1,13 @@
 package de.hechler.interceptor.https;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -21,7 +25,7 @@ import java.util.zip.GZIPInputStream;
 public class HttpStream {
 
 	
-	private static final String REQUEST_LINE_RX   = "^(GET|POST) ([^ ]+) HTTP/([0-9.]+)$";
+	private static final String REQUEST_LINE_RX   = "^(GET|POST|PROPFIND) ([^ ]+) HTTP/([0-9.]+)$";
 	private static final String RESPONSE_LINE_RX   = "^HTTP/([0-9.]+) ([0-9]+)\\s*(.*)$";
 	private static final String HEADER_FIELD_RX   = "^([^:]+):\\s*(.*)$";
 	private static final String CT_CHARSET_RX     = "^([^;]+);.*charset=([^;]+).*$";
@@ -111,6 +115,9 @@ public class HttpStream {
 		boolean gzip = contentEncoding.equals("gzip");
 		boolean chunked = transferEncoding.equals("chunked");
 
+		if (contentLength == 0) {
+			return null;    
+		}
 		if ((contentLength == -1) && !chunked) {
 			return null;    // TODO: support for new HTTP 2 chunks
 		}
@@ -211,39 +218,79 @@ public class HttpStream {
 	public boolean isRequest() {
 		return isRequest;
 	}
+
+
+	public static void parseLogFiles(File inputLogsFolder) {
+		String input = inputLogsFolder.getName();
+		if (input.endsWith("_parsed")) {
+			return;
+		}
+		String output = input+"_parsed";
+		File outputLogsFolder = new File(inputLogsFolder.getParentFile(), output);
+		if (outputLogsFolder.exists()) {
+			return;
+		}
+		System.out.println("processing "+inputLogsFolder);
+		outputLogsFolder.mkdirs();
+		
+		String[] logFiles = inputLogsFolder.list();
+		
+		for (String logFile:logFiles) {
+			System.out.println("  "+logFile);
+			File fIn = new File(inputLogsFolder, logFile);
+			File fOut = new File(outputLogsFolder, logFile);
+			
+			try {
+				HttpStream httpIn = new HttpStream(new FileInputStream(fIn));
+				PrintStream out = new PrintStream(new FileOutputStream(fOut));
+			
+				int cnt=1;
+				out.println("PROCESSING block "+cnt);
+				out.println();
+				while (httpIn.readRequestResponseLine()) {
+					if (httpIn.isRequest()) {
+						out.println("REQUEST: "+httpIn.getMethod()+" "+httpIn.getPath());
+					}
+					else {
+						out.println("RESPONSE: "+httpIn.getResponseCode()+" "+httpIn.getResponseMessage());
+					}
+					out.println();
+					httpIn.readHeaderParams();
+					for (String key : httpIn.keys()) {
+						out.println("  "+key+": "+httpIn.getHeaderFields(key));
+					}
+					out.println();
+					String body = httpIn.readStringBody();
+//					if (body.length()>200) {
+//						body = body.substring(0, 190)+"..."+body.substring(body.length()-10, body.length());
+//					}
+					out.println(body);
+					out.println();
+					cnt++;
+					out.println();
+					out.println("PROCESSING block "+cnt);
+					out.println();
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+				throw new RuntimeException(e);
+			}
+		}
+		
+	}
+
+	
+	public static void parseNewLogFiles(String baseFolder) {
+		File[] files = new File(baseFolder).listFiles();
+		for (File file : files) {
+			if (file.isDirectory()) {
+				parseLogFiles(file);
+			}
+		}
+	}
 	
 	public static void main(String[] args) throws IOException {
-//		HttpStream httpIn = new HttpStream(new FileInputStream("C:\\Users\\feri\\git\\InterceptorProxy\\socketlog\\20240824223205_sequential\\0001-response.log"));
-//		HttpStream httpIn = new HttpStream(new FileInputStream("C:\\Users\\feri\\git\\InterceptorProxy\\socketlog\\20240824223205_sequential\\0001-request.log"));
-		HttpStream httpIn = new HttpStream(new FileInputStream("C:\\Users\\A307131\\git\\InterceptorProxy\\socketlog\\20240826104533\\0007-request.log"));
-//		HttpStream httpIn = new HttpStream(new FileInputStream("C:\\Users\\A307131\\git\\InterceptorProxy\\socketlog\\20240826104533\\0007-response.log"));
-		int cnt=1;
-		System.out.println("PROCESSING block "+cnt);
-		System.out.println();
-		while (httpIn.readRequestResponseLine()) {
-			if (httpIn.isRequest()) {
-				System.out.println("REQUEST: "+httpIn.getMethod()+" "+httpIn.getPath());
-			}
-			else {
-				System.out.println("RESPONSE: "+httpIn.getResponseCode()+" "+httpIn.getResponseMessage());
-			}
-			System.out.println();
-			httpIn.readHeaderParams();
-			for (String key : httpIn.keys()) {
-				System.out.println("  "+key+": "+httpIn.getHeaderFields(key));
-			}
-			System.out.println();
-			String body = httpIn.readStringBody();
-			if (body.length()>200) {
-				body = body.substring(0, 190)+"..."+body.substring(body.length()-10, body.length());
-			}
-			System.out.println(body);
-			System.out.println();
-			cnt++;
-			System.out.println();
-			System.out.println("PROCESSING block "+cnt);
-			System.out.println();
-		}
+		parseNewLogFiles("socketlog");
 	}
 
 }

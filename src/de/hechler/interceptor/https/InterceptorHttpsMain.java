@@ -11,13 +11,14 @@ import java.nio.charset.StandardCharsets;
 
 public class InterceptorHttpsMain {
 
-	String TARGET_PROTOCOL = "http";
-	String TARGET_HOST="207.180.253.250";
-	int TARGET_PORT = 18080;
-
 //	String TARGET_PROTOCOL = "http";
-//	String TARGET_HOST="localhost";
+//	String TARGET_HOST="207.180.253.250";
 //	int TARGET_PORT = 18080;
+
+	String TARGET_PROTOCOL = "http";
+	String TARGET_HOST="localhost";
+//	int TARGET_PORT = 18080;
+	int TARGET_PORT = 18082;
 
 	private ServerSocket serverSocket;
 
@@ -71,15 +72,20 @@ public class InterceptorHttpsMain {
 	 * Listens to port and accepts new socket connections. 
 	 * Creates a new thread to handle the request and passes it the socket connection and continues listening.
 	 */
-	public void listen(){
+	public void listen(boolean allowParallelRequests){
 		while (true) {
 			try {
 				// serverSocket.accpet() Blocks until a connection is made
 				Socket socket = serverSocket.accept();
 				
-//				HttpsConnector httpsCon = new HttpsConnector(socket, TARGET_PROTOCOL, TARGET_HOST, TARGET_PORT);
-				HttpConnector httpsCon = new HttpConnector(socket, TARGET_HOST, TARGET_PORT, false);
-				httpsCon.start();
+				HttpsConnector httpsCon = new HttpsConnector(socket, TARGET_PROTOCOL, TARGET_HOST, TARGET_PORT);
+//				HttpConnector httpsCon = new HttpConnector(socket, TARGET_HOST, TARGET_PORT, false);
+				if (allowParallelRequests) {
+					httpsCon.start();
+				}
+				else {
+					httpsCon.run();
+				}
 				
 			} catch (SocketException e) {
 				// Socket exception is triggered by management system to shut down the proxy 
@@ -93,10 +99,11 @@ public class InterceptorHttpsMain {
 	
 	// Main method for the program
 	public static void main(String[] args) {
+		System.setProperty("sun.net.http.allowRestrictedHeaders", "true");
 		// Create an instance of Proxy and begin listening for connections
 		StreamLogger.setOutputFolder("./requestlog/"+Utils.now());
-		InterceptorHttpsMain proxy = new InterceptorHttpsMain(8080);
-		proxy.listen();	
+		InterceptorHttpsMain proxy = new InterceptorHttpsMain(18081);
+		proxy.listen(true);	
 	}
 	
 }

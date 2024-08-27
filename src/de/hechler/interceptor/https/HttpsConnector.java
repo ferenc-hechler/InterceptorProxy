@@ -38,6 +38,7 @@ public class HttpsConnector extends Thread {
 	private String targetHost;
 	private int targetPort;
 	private String targetHostPort;
+	private String sourceHostPort;
 	
 	private Exception lastErr;
 
@@ -52,6 +53,7 @@ public class HttpsConnector extends Thread {
 		this.targetPort = targetPort;
 		String portSuffix = ((this.targetPort==80)||(this.targetPort==443)) ? "" : ":"+this.targetPort;
 		this.targetHostPort = this.targetHost + portSuffix;
+		this.sourceHostPort = null;
 
 	}
 
@@ -108,16 +110,20 @@ public class HttpsConnector extends Thread {
 		        	List<String> values = browserIn.getHeaderFields(key);
 		        	for (String value:values) {
 			        	if (key.equalsIgnoreCase("host")) {
-			        		value = targetHostPort;
+			        		sourceHostPort = value;
 			        	}
 			        	connection.setRequestProperty(key, value);
 		        	}
 		        }
+		        if (!browserIn.keys().contains("host")) {
+		        	connection.setRequestProperty("host", sourceHostPort);
+		        }
 		        
-		        if (method.equals("POST")) {
+		        
+	        	InputStream bodyIs = browserIn.getBodyInputStream();
+		        if (bodyIs != null) {
 		        	connection.setDoOutput(true);
 		        	OutputStream serverOs = connection.getOutputStream();
-		        	InputStream bodyIs = browserIn.getBodyInputStream();
 		        	bodyIs.transferTo(serverOs);
 		        	serverOs.flush();
 		        	serverOs.close();
@@ -140,7 +146,7 @@ public class HttpsConnector extends Thread {
 		        		continue;
 		        	}
 		        	if (key.equalsIgnoreCase("content-length")) {
-		        		hasContent = true; 
+		        		hasContent = Integer.parseInt(values.get(0)) > 0; 
 		        	}
 		        	if (key.equalsIgnoreCase("transfer-encoding")) {
 		        		hasContent = true; 
@@ -158,8 +164,9 @@ public class HttpsConnector extends Thread {
 			        InputStream serverIs = connection.getInputStream();
 			        serverIs.transferTo(browserOs);
 					browserOs.flush();
-					serverIs.close();
+					// serverIs.close();
 				}
+				browserOs.flush();
 			}
 			
 		}
