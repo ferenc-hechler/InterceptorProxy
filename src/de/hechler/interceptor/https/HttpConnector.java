@@ -84,6 +84,8 @@ public class HttpConnector extends Thread {
 		try {
 //			clientSocket.setSoTimeout(2000);
 			logReq("creating input stream "+id);
+//			browserIn = new HttpStream(new LoggingInputStream(id+"-request", clientSocket.getInputStream()));
+//			browserOut = new HttpOutStream(new LoggingOutputStream(id+"-response", clientSocket.getOutputStream()));
 			browserIn = new HttpStream(new LoggingInputStream(id+"-request", clientSocket.getInputStream()));
 			browserOut = new HttpOutStream(new LoggingOutputStream(id+"-response", clientSocket.getOutputStream()));
 
@@ -162,8 +164,42 @@ public class HttpConnector extends Thread {
 			logERR(e.toString());
 			e.printStackTrace();
 		}
+		doClose(browserIn);
+		doClose(targetIn);
+		doClose(targetOut);
+		doClose(browserOut);
+		doClose(clientSocket);
+		doClose(targetSocket);
 	}
 	
+
+	private void doClose(HttpStream in) {
+		if (in != null) {
+			try {
+				in.close();
+			}
+			catch (Exception e) {}
+		}
+	}
+
+	private void doClose(HttpOutStream out) {
+		if (out != null) {
+			try {
+				out.close();
+			}
+			catch (Exception e) {}
+		}
+	}
+
+	private void doClose(Socket sock) {
+		if (sock != null) {
+			try {
+				sock.close();
+			}
+			catch (Exception e) {}
+		}
+	}
+
 
 	public Exception getLastError() {
 		return lastErr;

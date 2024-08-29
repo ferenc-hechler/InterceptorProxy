@@ -138,18 +138,10 @@ public class HttpsConnector extends Thread {
 				logRsp(responseLine);
 				browserWriteline(responseLine);
 
-				boolean hasContent = false;
-				
 		        for (String key : connection.getHeaderFields().keySet()) {
 		        	List<String> values = connection.getHeaderFields().get(key);
 		        	if (key == null) {
 		        		continue;
-		        	}
-		        	if (key.equalsIgnoreCase("content-length")) {
-		        		hasContent = Integer.parseInt(values.get(0)) > 0; 
-		        	}
-		        	if (key.equalsIgnoreCase("transfer-encoding")) {
-		        		hasContent = true; 
 		        	}
 		        	if (IGNORE_RESPONSE_HEADER_FIELDS.contains(key.toLowerCase())) {
 		        		continue;
@@ -159,14 +151,17 @@ public class HttpsConnector extends Thread {
 	        		}
 		        }
 		        browserWriteline("");
+
+		        String cl = connection.getHeaderField("Content-Length");
+	        	System.out.println("CL='"+cl+"'");
+		        if ("0".equals(cl)) {
+		        	System.out.println("DEBUG");
+		        }
 		        
-				if (hasContent) {             // responseCode == HttpURLConnection.HTTP_OK) { 
-			        InputStream serverIs = connection.getInputStream();
-			        serverIs.transferTo(browserOs);
-					browserOs.flush();
-					// serverIs.close();
-				}
+		        InputStream serverIs = connection.getInputStream();
+		        serverIs.transferTo(browserOs);
 				browserOs.flush();
+				serverIs.close();
 			}
 			
 		}

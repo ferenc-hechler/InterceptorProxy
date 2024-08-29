@@ -293,6 +293,10 @@ public class HttpStream {
 		parseNewLogFiles("socketlog");
 	}
 
+	public void close() throws IOException {
+		delegate.close();
+	}
+
 }
 
 

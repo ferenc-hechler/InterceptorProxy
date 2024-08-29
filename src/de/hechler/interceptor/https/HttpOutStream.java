@@ -23,6 +23,8 @@ public class HttpOutStream {
 	private String method;
 	private String path;
 
+	private String dir;
+	
 	private Map<String, List<String>> headerParams;
 	private Map<String, String> headerKeys;
 	private Charset charset;
@@ -38,6 +40,9 @@ public class HttpOutStream {
 		this.version = null;
 		this.responseCode = -1;
 		this.responseMessage = null;
+		this.method = null;
+		this.path = null;
+		this.dir = null;
 		this.headerParams = new LinkedHashMap<>();
 		this.headerKeys = new LinkedHashMap<>();
 		this.charset = StandardCharsets.ISO_8859_1;
@@ -48,6 +53,10 @@ public class HttpOutStream {
 		if (bodyOs != null) {
 			throw new UnsupportedOperationException("content stream was not finished");
 		}
+		if (dir != null) {
+			throw new UnsupportedOperationException("duplicate call to startRequest()/startResponse()");
+		}
+		dir = "rsp";
 		this.version = version;
 		this.responseCode = responseCode;
 		this.responseMessage = responseMessage;
@@ -57,6 +66,10 @@ public class HttpOutStream {
 		if (bodyOs != null) {
 			throw new UnsupportedOperationException("content stream was not finished");
 		}
+		if (dir != null) {
+			throw new UnsupportedOperationException("duplicate call to startRequest()/startResponse()");
+		}
+		dir = "req";
 		this.version = version;
 		this.method = method;
 		this.path = path;
@@ -96,8 +109,11 @@ public class HttpOutStream {
 		if (method != null) {
 			requestResponseLine = method + " " + path + " HTTP/"+version;
 		}
-		else {
+		else if (version != null) {
 			requestResponseLine = "HTTP/"+version+" "+responseCode+(responseMessage==null?"":" "+responseMessage);
+		}
+		else {
+			throw new UnsupportedOperationException("startRequest()/startResponse() was not called before sending header");
 		}
 		headerText.append(requestResponseLine).append(endl);
 		for (String key:headerKeys.values()) {
@@ -111,15 +127,15 @@ public class HttpOutStream {
 	
 	
 	public OutputStream getOutputStream(long contentSize, boolean chunked, boolean gzip) throws IOException {
-		if (version == null) {
-			throw new UnsupportedOperationException("startResponse was not called");
+		if (dir == null) {
+			throw new UnsupportedOperationException("startResponse()/startRequest() was not called");
 		}
 		if (contentSize>=0) {
-			overwriteHeaderField("Content-Size", Long.toString(contentSize));
+			overwriteHeaderField("Content-Length", Long.toString(contentSize));
 		}
 		else {
-			removeHeaderField("Content-Size");
-			throw new UnsupportedOperationException("undefined contentSize not yet supported");
+			removeHeaderField("Content-Length");
+			throw new UnsupportedOperationException("undefined Content-Lengthnot yet supported");
 		}
 		if (chunked) {
 			overwriteHeaderField("Transfer-Encoding", "chunked");
@@ -142,12 +158,16 @@ public class HttpOutStream {
 	
 	private void contentSentCallback() {
 		try {
-			System.out.println("    [r  ]: body finished");
+			System.out.println("    ["+dir+"]: body finished");
 			delegate.flush();
 			reset();
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
+	}
+
+	public void close() throws IOException {
+		delegate.close();
 	}
 	
 	
