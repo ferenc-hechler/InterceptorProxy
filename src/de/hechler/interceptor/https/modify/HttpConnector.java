@@ -106,6 +106,16 @@ public class HttpConnector extends Thread {
 				String method = browserIn.getMethod();
 				logReq(method+" "+path);
 
+				boolean modifyUpload = false;
+				String uploadFilename = null;
+				
+				if (method.equals("PUT") && path.startsWith("/remote.php/dav/files/")) {  // "PUT /remote.php/dav/files/feri/Documents/modified-modified-Readme.md HTTP/1.1"
+					modifyUpload = true;
+					int lastSlash = path.lastIndexOf('/');
+					uploadFilename = path.substring(lastSlash+1);
+					path = path.substring(0, lastSlash+1) + "modified-" + uploadFilename;
+				}
+				
 				targetOut.startRequest(version, method, path);
 				
 		        for (String key : browserIn.keys()) {
@@ -122,6 +132,10 @@ public class HttpConnector extends Thread {
 	        	if (bodyIs != null) {
 		        	ByteArrayOutputStream baos = new ByteArrayOutputStream(32768);
 		        	bodyIs.transferTo(baos);
+		        	
+		        	if (modifyUpload) {
+		        		baos = modifyUpload(uploadFilename, baos);
+		        	}
 
 					logReq("writing "+baos.size()+" bytes");
 		        	OutputStream bodyOs = targetOut.getOutputStream(baos.size(), false, false);
@@ -195,6 +209,22 @@ public class HttpConnector extends Thread {
 	}
 	
 
+	private ByteArrayOutputStream modifyUpload(String filename, ByteArrayOutputStream baos) {
+		if (!filename.endsWith(".md")) {
+			return baos;
+		}
+		String content = baos.toString(StandardCharsets.UTF_8);
+		content = modifyUpload(filename, content);
+		byte[] resultBytes = content.getBytes(StandardCharsets.UTF_8);
+		ByteArrayOutputStream result = new ByteArrayOutputStream(resultBytes.length);
+		result.writeBytes(resultBytes);
+		return result;
+	}
+
+	private String modifyUpload(String filename, String content) {
+		return content.replace("add a description", "add a description, uploaded at "+now()+",");
+	}
+
 	private ByteArrayOutputStream modify(String filename, ByteArrayOutputStream baos) {
 		if (!filename.endsWith(".md")) {
 			return baos;
@@ -215,7 +245,7 @@ public class HttpConnector extends Thread {
 	}
 	
 	private String modify(String filename, String content) {
-		return content.replace("add a description", "add a description, which was modified at "+now()+",");
+		return content.replace("add a description", "add a description, downloaded at "+now()+",");
 	}
 
 	private void doClose(HttpStream in) {

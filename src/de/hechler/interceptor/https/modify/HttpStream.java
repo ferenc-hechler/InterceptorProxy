@@ -25,7 +25,7 @@ import java.util.zip.GZIPInputStream;
 public class HttpStream {
 
 	
-	private static final String REQUEST_LINE_RX   = "^(GET|POST|PROPFIND) ([^ ]+) HTTP/([0-9.]+)$";
+	private static final String REQUEST_LINE_RX   = "^(GET|POST|PUT|PROPFIND) ([^ ]+) HTTP/([0-9.]+)$";
 	private static final String RESPONSE_LINE_RX   = "^HTTP/([0-9.]+) ([0-9]+)\\s*(.*)$";
 	private static final String HEADER_FIELD_RX   = "^([^:]+):\\s*(.*)$";
 	private static final String CT_CHARSET_RX     = "^([^;]+);.*charset=([^;]+).*$";
