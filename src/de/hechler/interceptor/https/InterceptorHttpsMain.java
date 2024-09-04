@@ -11,14 +11,14 @@ import java.nio.charset.StandardCharsets;
 
 public class InterceptorHttpsMain {
 
-//	String TARGET_PROTOCOL = "http";
-//	String TARGET_HOST="207.180.253.250";
-//	int TARGET_PORT = 18080;
-
 	String TARGET_PROTOCOL = "http";
-	String TARGET_HOST="localhost";
-//	int TARGET_PORT = 18080;
-	int TARGET_PORT = 18082;
+	String TARGET_HOST="207.180.253.250";
+	int TARGET_PORT = 18080;
+
+//	String TARGET_PROTOCOL = "http";
+//	String TARGET_HOST="localhost";
+////	int TARGET_PORT = 18080;
+//	int TARGET_PORT = 18082;
 
 	private ServerSocket serverSocket;
 
